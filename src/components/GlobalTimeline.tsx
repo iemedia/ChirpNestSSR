@@ -1,6 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import {
+  useEffect,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  Ref,
+} from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -17,7 +23,11 @@ type Tweet = {
   users?: TweetUser
 }
 
-export default function GlobalTimeline() {
+export type GlobalTimelineHandle = {
+  refetch: () => void
+}
+
+const GlobalTimeline = forwardRef((props, ref: Ref<GlobalTimelineHandle>) => {
   const [tweets, setTweets] = useState<Tweet[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +37,7 @@ export default function GlobalTimeline() {
     setError(null)
     try {
       const { data, error } = await supabase
-        .from<Tweet>('tweets')
+        .from('tweets')
         .select(`
           id,
           content,
@@ -49,31 +59,46 @@ export default function GlobalTimeline() {
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    refetch: fetchTweets,
+  }))
+
   useEffect(() => {
     fetchTweets()
 
-    const subscription = supabase
+    const channel = supabase
       .channel('public:tweets')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tweets' }, () => {
-        fetchTweets()
-      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tweets' },
+        () => {
+          fetchTweets()
+        }
+      )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(subscription)
+      supabase.removeChannel(channel)
     }
   }, [])
 
-  if (loading) return <p className="text-center p-4 text-black">Loading tweets...</p>
-  if (error) return <p className="text-center p-4 text-red-600">Error: {error}</p>
+  if (loading)
+    return <p className="text-center p-4 text-black">Loading tweets...</p>
+  if (error)
+    return <p className="text-center p-4 text-red-600">Error: {error}</p>
 
   return (
     <div className="space-y-4">
-      {tweets.length === 0 && <p className="text-center text-black">No tweets yet.</p>}
+      {tweets.length === 0 && (
+        <p className="text-center text-black">No tweets yet.</p>
+      )}
 
-      {tweets.map(tweet => {
-        const username = tweet.users?.username || tweet.users?.email || 'Unknown user'
-        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+      {tweets.map((tweet) => {
+        const username =
+          tweet.users?.username || tweet.users?.email || 'Unknown user'
+        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+          username
+        )}`
 
         return (
           <div
@@ -90,12 +115,16 @@ export default function GlobalTimeline() {
             </div>
             <p className="whitespace-pre-wrap">{tweet.content}</p>
             <div className="text-xs text-gray-500 mt-2">
-              {formatDistanceToNow(new Date(tweet.created_at), { addSuffix: true })}
+              {formatDistanceToNow(new Date(tweet.created_at), {
+                addSuffix: true,
+              })}
             </div>
           </div>
         )
       })}
     </div>
   )
-}
+})
+
+export default GlobalTimeline
 

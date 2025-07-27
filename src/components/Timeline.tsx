@@ -1,3 +1,4 @@
+// src/components/Timeline.tsx
 'use client'
 
 import {
@@ -121,6 +122,7 @@ const Timeline = forwardRef((props, ref: Ref<TimelineHandle>) => {
 })
 
 export default Timeline
+
 
 
 

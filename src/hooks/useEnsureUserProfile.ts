@@ -10,9 +10,9 @@ export function useEnsureUserProfile(user: User | null) {
 
     async function ensureUser() {
       try {
-        // Check if user exists in 'users' table
+        // Check if user exists in 'profiles' table
         const { data, error } = await supabase
-          .from('users')
+          .from('profiles')
           .select('id')
           .eq('id', user.id)
           .maybeSingle()
@@ -25,20 +25,19 @@ export function useEnsureUserProfile(user: User | null) {
             user.user_metadata?.username ||
             (user.email ? user.email.split('@')[0] : 'anonymous')
 
-          const avatarUrl = `https://api.dicebear.com/4.16.2/avataaars/svg?seed=${encodeURIComponent(
+          const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
             username
           )}&backgroundColor=transparent`
 
-          // Insert new user profile row
+          // Insert new user profile row into 'profiles'
           const { error: insertError } = await supabase
-            .from('users')
+            .from('profiles')
             .insert(
               [
                 {
                   id: user.id,
                   username,
                   avatar_url: avatarUrl,
-                  email: user.email,
                   bio: '',
                 },
               ],
@@ -48,7 +47,7 @@ export function useEnsureUserProfile(user: User | null) {
           if (insertError) {
             console.error('Insert profile error:', insertError)
           } else {
-            console.log('New user profile created for:', user.id)
+            console.log('✅ New user profile created for:', user.id)
           }
         }
       } catch (err) {

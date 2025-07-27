@@ -5,18 +5,19 @@ import { useAuth } from '@/hooks/useAuth'
 import { useEnsureUserProfile } from '@/hooks/useEnsureUserProfile'
 import ChirpBox from '@/components/ChirpBox'
 import Timeline, { TimelineHandle } from '@/components/Timeline'
-import GlobalTimeline from '@/components/GlobalTimeline'
+import GlobalTimeline, { GlobalTimelineHandle } from '@/components/GlobalTimeline'
 import Gallery from '@/components/Gallery'
-import ProfileSidebar from '@/components/ProfileSidebar'
+import ProfileCard from '@/components/ProfileCard'
 import { supabase } from '@/lib/supabaseClient'
 import { Toaster, toast } from 'react-hot-toast'
-import CustomAuth from '@/components/CustomAuth' // ✅ imported
+import CustomAuth from '@/components/CustomAuth'
 
 export default function HomePage() {
   const { user, loading } = useAuth()
   useEnsureUserProfile(user)
 
   const timelineRef = useRef<TimelineHandle>(null)
+  const globalTimelineRef = useRef<GlobalTimelineHandle>(null)
 
   const handleLogout = async () => {
     try {
@@ -25,6 +26,11 @@ export default function HomePage() {
     } catch (error: any) {
       toast.error('Logout failed: ' + error.message)
     }
+  }
+
+  const handleChirp = () => {
+    timelineRef.current?.refetch()
+    globalTimelineRef.current?.refetch()
   }
 
   useEffect(() => {
@@ -66,24 +72,24 @@ export default function HomePage() {
 
           {/* Top Section: Profile Sidebar + Gallery */}
           <section className="flex gap-8" style={{ height: '320px' }}>
-            <div className="w-[30%] h-full">
-              <ProfileSidebar />
+            <div className="w-[30%] min-w-0 h-full">
+              <ProfileCard user={user} />
             </div>
-            <div className="w-[70%] h-full">
+            <div className="w-[70%] min-w-0 h-full">
               <Gallery />
             </div>
           </section>
 
-          {/* Bottom Section: ChirpBox + Timeline / What's Happening */}
+          {/* Bottom Section: ChirpBox + Timelines */}
           <section className="flex gap-8">
             <main className="w-[30%] flex flex-col gap-6">
-              <ChirpBox user={user} onChirp={() => timelineRef.current?.refresh()} />
+              <ChirpBox user={user} onChirp={handleChirp} />
               <Timeline ref={timelineRef} />
             </main>
 
             <aside className="w-[70%] bg-white rounded-lg p-6 shadow-md">
               <h2 className="text-2xl font-bold text-black pb-6">What's Happening</h2>
-              <GlobalTimeline />
+              <GlobalTimeline ref={globalTimelineRef} />
             </aside>
           </section>
         </div>

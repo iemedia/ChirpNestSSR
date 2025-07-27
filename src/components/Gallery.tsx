@@ -6,7 +6,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 const galleryImages = [
   'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1524253482453-3fed8d2fe12b?auto=format&fit=crop&w=600&q=80',
+  'https://images.unsplash.com/photo-1524253482453-3fed8d2fe12b?auto=format&w=600&q=80',
   'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=600&q=80',
   'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=600&q=80',
@@ -18,7 +18,7 @@ export default function Gallery() {
   const startX = useRef(0)
   const scrollLeft = useRef(0)
 
-  const imageWidth = 224 // 220px + 4px gap
+  const imageWidth = 224
 
   const scrollLeftClick = () => {
     scrollRef.current?.scrollBy({ left: -imageWidth, behavior: 'smooth' })
@@ -28,7 +28,6 @@ export default function Gallery() {
     scrollRef.current?.scrollBy({ left: imageWidth, behavior: 'smooth' })
   }
 
-  // Mouse drag handlers
   const onMouseDown = (e: React.MouseEvent) => {
     if (!scrollRef.current) return
     isDragging.current = true
@@ -40,7 +39,7 @@ export default function Gallery() {
     if (!isDragging.current || !scrollRef.current) return
     e.preventDefault()
     const x = e.pageX - scrollRef.current.offsetLeft
-    const walk = (x - startX.current) * 1.2 // scroll speed
+    const walk = (x - startX.current) * 1.2
     scrollRef.current.scrollLeft = scrollLeft.current - walk
   }
 
@@ -49,21 +48,29 @@ export default function Gallery() {
   }
 
   return (
-    <div className="relative flex items-center h-full w-full overflow-hidden select-none">
-      {/* Left Arrow */}
-      <button
-        onClick={scrollLeftClick}
-        aria-label="Scroll Left"
-        className="absolute left-2 z-10 p-2 backdrop-blur-sm bg-black/30 text-white rounded-full shadow hover:bg-black/50 transition focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
-      >
-        <ChevronLeftIcon className="w-6 h-6" />
-      </button>
+    <div className="relative h-full w-full select-none flex items-center overflow-hidden">
+      {/* Arrows */}
+      <div className="absolute inset-0 flex justify-between items-center z-10 pointer-events-none">
+        <button
+          onClick={scrollLeftClick}
+          aria-label="Scroll Left"
+          className="pointer-events-auto p-2 text-white hover:text-purple-400 transition"
+        >
+          <ChevronLeftIcon className="w-10 h-10 cursor-pointer" />
+        </button>
+        <button
+          onClick={scrollRightClick}
+          aria-label="Scroll Right"
+          className="pointer-events-auto p-2 text-white hover:text-purple-400 transition"
+        >
+          <ChevronRightIcon className="w-10 h-10 cursor-pointer" />
+        </button>
+      </div>
 
-      {/* Images Container */}
+      {/* Scrollable images */}
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto gap-4 h-full px-10 pb-2 no-scrollbar cursor-grab active:cursor-grabbing"
+        className="flex overflow-x-auto gap-4 h-full no-scrollbar cursor-grab active:cursor-grabbing"
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseUp}
@@ -72,10 +79,8 @@ export default function Gallery() {
         {galleryImages.map((url, idx) => (
           <div
             key={idx}
-            className="flex-shrink-0 rounded-xl shadow-inner"
+            className="flex-shrink-0 w-[220px] h-full rounded-xl shadow-inner"
             style={{
-              width: 220,
-              height: '100%',
               boxShadow: 'inset 0 0 10px rgba(0,0,0,0.15)',
             }}
           >
@@ -89,16 +94,6 @@ export default function Gallery() {
           </div>
         ))}
       </div>
-
-      {/* Right Arrow */}
-      <button
-        onClick={scrollRightClick}
-        aria-label="Scroll Right"
-        className="absolute right-2 z-10 p-2 backdrop-blur-sm bg-black/30 text-white rounded-full shadow hover:bg-black/50 transition focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
-      >
-        <ChevronRightIcon className="w-6 h-6" />
-      </button>
     </div>
   )
 }
