@@ -20,7 +20,7 @@ export default function ChirpBox({ user, onChirp }: ChirpBoxProps) {
 
     setLoading(true)
 
-    const { error } = await supabase.from('tweets').insert([
+    const { error } = await supabase.from('posts').insert([
       {
         content,
         user_id: user.id,

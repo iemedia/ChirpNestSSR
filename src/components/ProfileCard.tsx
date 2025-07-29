@@ -52,7 +52,7 @@ export default function ProfileCard() {
       )}&backgroundColor=transparent`
 
   return (
-    <div className="flex flex-col items-center bg-gray-900 text-white rounded-xl shadow-md h-full p-6">
+    <div className="flex flex-col items-center bg-gray-900 text-white rounded-xl shadow-md h-full p-8">
       <img
         src={avatar}
         alt="User Avatar"

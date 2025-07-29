@@ -70,7 +70,7 @@ export default function Gallery() {
       {/* Scrollable images */}
       <div
         ref={scrollRef}
-        className="flex overflow-x-auto gap-4 h-full no-scrollbar cursor-grab active:cursor-grabbing"
+        className="flex overflow-x-auto gap-4 h-full no-scrollbar cursor-grab active:cursor-grabbing pr-6"
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseUp}
@@ -94,6 +94,9 @@ export default function Gallery() {
           </div>
         ))}
       </div>
+
+      {/* Right fade effect */}
+      <div className="pointer-events-none absolute right-0 top-0 h-full w-16 bg-gradient-to-l from-white to-transparent z-10" />
     </div>
   )
 }
