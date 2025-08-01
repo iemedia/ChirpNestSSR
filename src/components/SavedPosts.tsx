@@ -22,13 +22,13 @@ type Post = {
   }
 }
 
-export type MyPostsHandle = {
+export type SavedPostsHandle = {
   refetch: () => void
 }
 
 const PAGE_SIZE = 3
 
-const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
+const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>) => {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,20 +36,22 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
   const [hasMore, setHasMore] = useState(true)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
 
-  const fetchPosts = async (pageToFetch = 1) => {
+  const fetchSavedPosts = async (pageToFetch = 1) => {
     setLoading(true)
     setError(null)
     try {
       const { data, error } = await supabase
-        .from('posts')
+        .from('saved_posts')
         .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          users!posts_user_id_fkey (
-            email,
-            username
+          posts (
+            id,
+            content,
+            created_at,
+            user_id,
+            users (
+              email,
+              username
+            )
           )
         `)
         .eq('user_id', props.user.id)
@@ -58,13 +60,26 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
 
       if (error) throw error
 
+      const mappedPosts = (data || [])
+        .map((item: any) => {
+          const post = item.posts
+          if (!post) return null
+          return {
+            ...post,
+            users: post.users,
+          }
+        })
+        .filter((p: Post | null) => p !== null) as Post[]
+
+      console.log('Fetched saved posts:', mappedPosts) // <-- Debug
+
       if (pageToFetch === 1) {
-        setPosts(data || [])
+        setPosts(mappedPosts)
       } else {
-        setPosts((prev) => [...prev, ...(data || [])])
+        setPosts((prev) => [...prev, ...mappedPosts])
       }
 
-      setHasMore(data && data.length === PAGE_SIZE)
+      setHasMore(mappedPosts.length === PAGE_SIZE)
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -75,20 +90,20 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
   useImperativeHandle(ref, () => ({
     refetch: () => {
       setPage(1)
-      fetchPosts(1)
+      fetchSavedPosts(1)
     },
   }))
 
   useEffect(() => {
     setPage(1)
-    fetchPosts(1)
+    fetchSavedPosts(1)
 
     const subscription = supabase
-      .channel('public:posts')
+      .channel('public:saved_posts')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'posts' },
-        () => fetchPosts(1)
+        { event: '*', schema: 'public', table: 'saved_posts' },
+        () => fetchSavedPosts(1)
       )
       .subscribe()
 
@@ -101,7 +116,7 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
     if (loading) return
     const nextPage = page + 1
     setPage(nextPage)
-    fetchPosts(nextPage)
+    fetchSavedPosts(nextPage)
   }
 
   const toggleExpanded = (id: string) => {
@@ -111,18 +126,20 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
     }))
   }
 
+  // Defensive check for empty posts array
+  const noPostsToShow = !loading && (posts.length === 0)
+
   return (
     <div className="space-y-4">
-      {/* Removed internal tab switcher here */}
-
-      {/* Loading/Error */}
       {loading && posts.length === 0 && (
         <p className="text-center p-4 text-white">Loading posts...</p>
       )}
       {error && <p className="text-center p-4 text-red-300">Error: {error}</p>}
 
-      {posts.length === 0 && !loading && (
-        <p className="text-center text-white">No posts yet.</p>
+      {noPostsToShow && (
+        <p className="text-center text-gray-500 text-sm">
+          You have no saved posts.
+        </p>
       )}
 
       {posts.map((post) => {
@@ -192,7 +209,9 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
   )
 })
 
-export default MyPosts
+SavedPosts.displayName = 'SavedPosts'
+export default SavedPosts
+
 
 
 

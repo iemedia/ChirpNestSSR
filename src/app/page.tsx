@@ -1,12 +1,13 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { useEnsureUserProfile } from '@/hooks/useEnsureUserProfile'
 import ChirpBox from '@/components/ChirpBox'
 import MyPosts, { MyPostsHandle } from '@/components/MyPosts'
 import GlobalTimeline, { GlobalTimelineHandle } from '@/components/GlobalTimeline'
+import SavedPosts from '@/components/SavedPosts'
 import Gallery from '@/components/Gallery'
 import ProfileCard from '@/components/ProfileCard'
 import { supabase } from '@/lib/supabaseClient'
@@ -16,6 +17,8 @@ import CustomAuth from '@/components/CustomAuth'
 export default function Page() {
   const { user, loading } = useAuth()
   useEnsureUserProfile(user)
+
+  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'explore'>('posts')
 
   const myPostsRef = useRef<MyPostsHandle>(null)
   const globalTimelineRef = useRef<GlobalTimelineHandle>(null)
@@ -80,7 +83,7 @@ export default function Page() {
           </header>
 
           {/* Top Section */}
-          <section className="flex gap-8" style={{ height: '320px' }}>
+          <section className="flex gap-6" style={{ height: '320px' }}>
             <div className="w-[25%] min-w-0 h-full">
               <ProfileCard user={user} />
             </div>
@@ -90,13 +93,38 @@ export default function Page() {
           </section>
 
           {/* Bottom Section */}
-          <section className="flex gap-8">
-            <main className="w-[25%] flex flex-col gap-6">
+          <section className="flex gap-6 items-start overflow-hidden">
+            <main className="flex-1 basis-1/4 min-w-0 flex flex-col gap-6">
               <ChirpBox user={user} onChirp={handleChirp} />
-              <MyPosts ref={myPostsRef} user={user} />
+
+              {/* FILTER - Inserted exactly here, styled like GlobalTimeline filters */}
+              <div className="flex justify-center">
+                <div className="inline-flex items-center rounded-full bg-gray-100 p-1 text-sm font-semibold text-gray-500">
+                  {['posts', 'saved', 'explore'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab as 'posts' | 'saved' | 'explore')}
+                      className={`px-4 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${
+                        activeTab === tab
+                          ? 'bg-white text-black shadow-sm'
+                          : 'hover:text-black'
+                      }`}
+                    >
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Render posts or saved or explore */}
+              {activeTab === 'posts' && <MyPosts ref={myPostsRef} user={user} />}
+              {activeTab === 'saved' && <SavedPosts user={user} />}
+              {activeTab === 'explore' && (
+                <p className="text-gray-500 text-sm text-center mt-4">Explore coming soon...</p>
+              )}
             </main>
 
-            <aside className="w-[75%] bg-white rounded-lg p-6 shadow-md">
+            <aside className="flex-1 basis-3/4 min-w-0 bg-white rounded-lg p-6 shadow-md">
               <GlobalTimeline ref={globalTimelineRef} user={user} />
             </aside>
           </section>
@@ -105,3 +133,4 @@ export default function Page() {
     </>
   )
 }
+

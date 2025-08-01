@@ -8,7 +8,7 @@ import {
   Ref,
 } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { formatDistanceToNow } from 'date-fns'
+import PostCard from './PostCard'
 
 type PostUser = {
   email: string | null
@@ -37,6 +37,8 @@ const GlobalTimeline = forwardRef(
     const [filter, setFilter] = useState<'everyone' | 'following'>('everyone')
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(true)
+    const [likesMap, setLikesMap] = useState<Record<string, boolean>>({})
+    const [savedMap, setSavedMap] = useState<Record<string, boolean>>({})
 
     const fetchPosts = async (pageToFetch = 1) => {
       setLoading(true)
@@ -91,23 +93,65 @@ const GlobalTimeline = forwardRef(
       }
     }
 
+    const fetchLikes = async () => {
+      if (!user?.id) return
+      const { data, error } = await supabase
+        .from('likes')
+        .select('post_id')
+        .eq('user_id', user.id)
+
+      if (error) return
+
+      const likedPosts = data?.reduce<Record<string, boolean>>((acc, like) => {
+        acc[like.post_id] = true
+        return acc
+      }, {}) || {}
+
+      setLikesMap(likedPosts)
+    }
+
+    const fetchSaved = async () => {
+      if (!user?.id) return
+      const { data, error } = await supabase
+        .from('saved_posts')
+        .select('post_id')
+        .eq('user_id', user.id)
+
+      if (error) return
+
+      const savedPosts = data?.reduce<Record<string, boolean>>((acc, item) => {
+        acc[item.post_id] = true
+        return acc
+      }, {}) || {}
+
+      setSavedMap(savedPosts)
+    }
+
     useImperativeHandle(ref, () => ({
       refetch: () => {
         setPage(1)
         fetchPosts(1)
+        fetchLikes()
+        fetchSaved()
       },
     }))
 
     useEffect(() => {
       setPage(1)
       fetchPosts(1)
+      fetchLikes()
+      fetchSaved()
 
       const channel = supabase
         .channel('public:posts')
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'posts' },
-          () => fetchPosts(1)
+          () => {
+            fetchPosts(1)
+            fetchLikes()
+            fetchSaved()
+          }
         )
         .subscribe()
 
@@ -122,19 +166,73 @@ const GlobalTimeline = forwardRef(
       fetchPosts(nextPage)
     }
 
+    const toggleLike = async (postId: string) => {
+      if (!user?.id) return
+      const isLiked = likesMap[postId]
+
+      if (isLiked) {
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .match({ user_id: user.id, post_id: postId })
+
+        if (!error) {
+          setLikesMap((prev) => ({ ...prev, [postId]: false }))
+        }
+      } else {
+        const { error } = await supabase.from('likes').insert({
+          user_id: user.id,
+          post_id: postId,
+        })
+
+        if (!error) {
+          setLikesMap((prev) => ({ ...prev, [postId]: true }))
+        }
+      }
+    }
+
+    const toggleSave = async (postId: string) => {
+      if (!user?.id) return
+      const isSaved = savedMap[postId]
+
+      if (isSaved) {
+        const { error } = await supabase
+          .from('saved_posts')
+          .delete()
+          .match({ user_id: user.id, post_id: postId })
+
+        if (!error) {
+          setSavedMap((prev) => ({ ...prev, [postId]: false }))
+        }
+      } else {
+        const { error } = await supabase.from('saved_posts').insert([
+          {
+            user_id: user.id,
+            post_id: postId,
+          },
+        ])
+
+        if (!error) {
+          setSavedMap((prev) => ({ ...prev, [postId]: true }))
+        }
+      }
+    }
+
     if (loading && posts.length === 0)
       return <p className="text-center p-4 text-black">Loading posts...</p>
     if (error)
       return <p className="text-center p-4 text-red-600">Error: {error}</p>
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 break-words overflow-x-hidden">
         <div className="flex justify-between items-center mb-10">
           <h2 className="text-2xl font-bold text-black">What's Happening</h2>
           <div className="flex gap-6">
             <button
-              className={`text-sm font-semibold hover:text-gray-900 transition cursor-pointer ${
-                filter === 'everyone' ? 'text-gray-900' : 'text-gray-500'
+              className={`text-sm font-semibold transition cursor-pointer pb-1 ${
+                filter === 'everyone'
+                  ? 'text-black border-b-2 border-purple-500'
+                  : 'text-gray-500 hover:text-black'
               }`}
               onClick={() => {
                 setPage(1)
@@ -144,8 +242,10 @@ const GlobalTimeline = forwardRef(
               Everyone
             </button>
             <button
-              className={`text-sm font-semibold hover:text-gray-900 transition cursor-pointer ${
-                filter === 'following' ? 'text-gray-900' : 'text-gray-500'
+              className={`text-sm font-semibold transition cursor-pointer pb-1 ${
+                filter === 'following'
+                  ? 'text-black border-b-2 border-purple-500'
+                  : 'text-gray-500 hover:text-black'
               }`}
               onClick={() => {
                 setPage(1)
@@ -161,35 +261,16 @@ const GlobalTimeline = forwardRef(
           <p className="text-center text-black">No posts yet.</p>
         )}
 
-        {posts.map((post) => {
-          const username =
-            post.users?.username || post.users?.email || 'Unknown user'
-          const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-            username
-          )}`
-
-          return (
-            <div
-              key={post.id}
-              className="p-6 rounded-xl bg-white text-black shadow-md shadow-black/10 border-t-2 border-solid border-gray-200 animate-fade-in"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <img
-                  src={avatarUrl}
-                  alt={`${username} avatar`}
-                  className="w-10 h-10 rounded-full"
-                />
-                <span className="font-semibold">{username}</span>
-              </div>
-              <p className="whitespace-pre-wrap">{post.content}</p>
-              <div className="text-xs text-gray-500 mt-3">
-                {formatDistanceToNow(new Date(post.created_at), {
-                  addSuffix: true,
-                })}
-              </div>
-            </div>
-          )
-        })}
+        {posts.map((post) => (
+          <PostCard
+            key={post.id}
+            post={post}
+            liked={likesMap[post.id]}
+            saved={savedMap[post.id]}
+            onLikeToggle={toggleLike}
+            onSaveToggle={toggleSave}
+          />
+        ))}
 
         {hasMore && !loading && (
           <div className="text-center">
@@ -207,6 +288,14 @@ const GlobalTimeline = forwardRef(
 )
 
 export default GlobalTimeline
+
+
+
+
+
+
+
+
 
 
 
