@@ -23,6 +23,12 @@
   }
 }
 
+@layer utilities {
+  .glow-effect {
+    filter: drop-shadow(0 0 6px rgba(255, 0, 100, 0.3));
+  }
+}
+
 /* Hide scrollbars for horizontal gallery */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { AiFillHeart } from 'react-icons/ai'
 import { FaRegCommentDots, FaShare, FaBookmark } from 'react-icons/fa'
 import { formatDistanceToNow } from 'date-fns'
@@ -32,11 +33,21 @@ export default function PostCard({
   onLikeToggle,
   onSaveToggle,
 }: PostCardProps) {
-  const username =
-    post.users?.username || post.users?.email || 'Unknown user'
-  const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-    username
-  )}`
+  const username = useMemo(() => {
+    return post.users?.username || post.users?.email || 'Unknown user'
+  }, [post.users])
+
+  const avatarUrl = useMemo(() => {
+    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+      username
+    )}`
+  }, [username])
+
+  const timestamp = useMemo(() => {
+    return formatDistanceToNow(new Date(post.created_at), {
+      addSuffix: true,
+    })
+  }, [post.created_at])
 
   return (
     <div className="p-6 rounded-xl bg-white text-black shadow-md shadow-black/10 border-t-2 border-solid border-gray-200 animate-fade-in break-words">
@@ -119,13 +130,25 @@ export default function PostCard({
           </button>
         </div>
 
-        <div className="text-xs text-gray-500">
-          {formatDistanceToNow(new Date(post.created_at), {
-            addSuffix: true,
-          })}
-        </div>
+        <div className="text-xs text-gray-500">{timestamp}</div>
       </div>
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

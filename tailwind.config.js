@@ -1,4 +1,4 @@
-const plugin = require('tailwindcss/plugin')')
+const plugin = require('tailwindcss/plugin')  // Remove extra closing quote and parenthesis
 
 module.exports = {
   content: [
@@ -35,7 +35,6 @@ module.exports = {
         },
       })
     }),
-    
   ],
 }
 

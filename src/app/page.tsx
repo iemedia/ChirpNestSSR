@@ -13,6 +13,7 @@ import ProfileCard from '@/components/ProfileCard'
 import { supabase } from '@/lib/supabaseClient'
 import { Toaster, toast } from 'react-hot-toast'
 import CustomAuth from '@/components/CustomAuth'
+import { PostProvider } from '@/context/PostProvider'
 
 export default function Page() {
   const { user, loading } = useAuth()
@@ -59,7 +60,7 @@ export default function Page() {
   }
 
   return (
-    <>
+    <PostProvider>
       <Toaster position="top-center" />
       <div className="min-h-screen bg-gradient-to-b from-purple-950 to-black bg-fixed bg-no-repeat bg-contain flex justify-center py-12 px-2 sm:px-2 md:px-2">
         <div className="max-w-6xl w-full bg-white rounded-xl shadow-lg p-4 sm:p-4 lg:p-4 flex flex-col gap-10">
@@ -130,7 +131,7 @@ export default function Page() {
           </section>
         </div>
       </div>
-    </>
+    </PostProvider>
   )
 }
 

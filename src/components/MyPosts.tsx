@@ -6,27 +6,23 @@ import {
   forwardRef,
   useImperativeHandle,
   Ref,
+  useCallback,
 } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
+import { PostSchema } from '@/schemas/post'
+import { z } from 'zod'
+import toast from 'react-hot-toast'
+import { FiTrash2 } from 'react-icons/fi'
 
-type Post = {
-  id: string
-  content: string
-  created_at: string
-  user_id: string
-  users?: {
-    email?: string
-    username?: string
-  }
-}
+const PAGE_SIZE = 3
+
+type Post = z.infer<typeof PostSchema>
 
 export type MyPostsHandle = {
   refetch: () => void
 }
-
-const PAGE_SIZE = 3
 
 const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
   const [posts, setPosts] = useState<Post[]>([])
@@ -35,42 +31,52 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
+  const [fadingOut, setFadingOut] = useState<string | null>(null)
 
-  const fetchPosts = async (pageToFetch = 1) => {
+  const fetchPosts = useCallback(async (pageToFetch = 1) => {
     setLoading(true)
     setError(null)
     try {
+      const rangeFrom = (pageToFetch - 1) * PAGE_SIZE
+      const rangeTo = pageToFetch * PAGE_SIZE - 1
+
       const { data, error } = await supabase
         .from('posts')
-        .select(`
+        .select(
+          `
           id,
           content,
           created_at,
           user_id,
-          users!posts_user_id_fkey (
-            email,
-            username
+          users (
+            id,
+            username,
+            email
           )
-        `)
+        `
+        )
         .eq('user_id', props.user.id)
         .order('created_at', { ascending: false })
-        .range((pageToFetch - 1) * PAGE_SIZE, pageToFetch * PAGE_SIZE - 1)
+        .range(rangeFrom, rangeTo)
 
       if (error) throw error
 
+      const parsed = z.array(PostSchema).safeParse(data)
+      if (!parsed.success) throw new Error('Invalid post data from Supabase')
+
       if (pageToFetch === 1) {
-        setPosts(data || [])
+        setPosts(parsed.data)
       } else {
-        setPosts((prev) => [...prev, ...(data || [])])
+        setPosts((prev) => [...prev, ...parsed.data])
       }
 
-      setHasMore(data && data.length === PAGE_SIZE)
+      setHasMore(parsed.data.length === PAGE_SIZE)
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [props.user.id])
 
   useImperativeHandle(ref, () => ({
     refetch: () => {
@@ -95,7 +101,7 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
     return () => {
       supabase.removeChannel(subscription)
     }
-  }, [props.user?.id])
+  }, [fetchPosts])
 
   const loadMore = () => {
     if (loading) return
@@ -111,11 +117,51 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
     }))
   }
 
+  const confirmDelete = (postId: string) => {
+    toast((t) => (
+      <div className="text-white">
+        <p className="mb-2">Delete this post?</p>
+        <div className="flex justify-end gap-3">
+          <button
+            className="px-2 py-1 text-sm text-gray-300 hover:text-red-400 transition"
+            onClick={async () => {
+              toast.dismiss(t.id)
+              setFadingOut(postId)
+              setTimeout(async () => {
+                const { error } = await supabase.from('posts').delete().eq('id', postId)
+                if (error) {
+                  toast.error('Failed to delete post.')
+                } else {
+                  toast.success('Post deleted')
+                  fetchPosts(1)
+                }
+                setFadingOut(null)
+              }, 300) // match fade-out duration
+            }}
+          >
+            Yes
+          </button>
+          <button
+            className="px-2 py-1 text-sm text-gray-400 hover:text-gray-200 transition"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 4000,
+      position: 'bottom-center',
+      style: {
+        background: '#1f1f1f',
+        border: '1px solid #444',
+        color: '#fff',
+      },
+    })
+  }
+
   return (
     <div className="space-y-4">
-      {/* Removed internal tab switcher here */}
-
-      {/* Loading/Error */}
       {loading && posts.length === 0 && (
         <p className="text-center p-4 text-white">Loading posts...</p>
       )}
@@ -128,23 +174,38 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
       {posts.map((post) => {
         const username =
           post.users?.username || post.users?.email || 'Unknown user'
-        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+          username
+        )}`
         const isLong = post.content.length > 140
         const isExpanded = expandedPosts[post.id]
+        const isFadingOut = fadingOut === post.id
 
         return (
           <div
             key={post.id}
-            className="p-6 rounded-xl bg-gray-900 text-gray-100 shadow-md shadow-black/20 animate-fade-in"
+            className={clsx(
+              'p-6 rounded-xl bg-gray-900 text-gray-100 shadow-md shadow-black/20 transition-opacity duration-300 ease-in-out animate-fade-in',
+              isFadingOut && 'opacity-0 pointer-events-none'
+            )}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <img
-                src={avatarUrl}
-                alt={`${username} avatar`}
-                className="w-6 h-6 rounded-full"
-                loading="lazy"
-              />
-              <span className="text-white font-semibold">{username}</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <img
+                  src={avatarUrl}
+                  alt={`${username} avatar`}
+                  className="w-6 h-6 rounded-full"
+                  loading="lazy"
+                />
+                <span className="text-white font-semibold">{username}</span>
+              </div>
+              <button
+                onClick={() => confirmDelete(post.id)}
+                className="text-gray-500 hover:text-red-500 transition"
+                title="Delete post"
+              >
+                <FiTrash2 size={16} />
+              </button>
             </div>
 
             <div
@@ -193,6 +254,12 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
 })
 
 export default MyPosts
+
+
+
+
+
+
 
 
 

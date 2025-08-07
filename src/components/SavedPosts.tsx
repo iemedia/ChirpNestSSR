@@ -3,30 +3,42 @@
 import {
   useEffect,
   useState,
+  useRef,
   forwardRef,
   useImperativeHandle,
   Ref,
+  useCallback,
 } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
+import { z } from 'zod'
+import { PostSchema } from '@/schemas/post'
 
-type Post = {
-  id: string
-  content: string
-  created_at: string
-  user_id: string
-  users?: {
-    email?: string
-    username?: string
-  }
-}
+const PAGE_SIZE = 3
+
+const SavedPostSchema = z.object({
+  posts: PostSchema.nullable(),
+})
+const SavedPostsResponseSchema = z.array(SavedPostSchema)
 
 export type SavedPostsHandle = {
   refetch: () => void
 }
 
-const PAGE_SIZE = 3
+type Post = z.infer<typeof PostSchema>
+
+const dedupePosts = (posts: Post[]) => {
+  const map = new Map<string, Post>()
+  const result: Post[] = []
+  posts.forEach((post) => {
+    if (!map.has(post.id)) {
+      map.set(post.id, post)
+      result.push(post)
+    }
+  })
+  return result
+}
 
 const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>) => {
   const [posts, setPosts] = useState<Post[]>([])
@@ -36,87 +48,99 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
   const [hasMore, setHasMore] = useState(true)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
 
-  const fetchSavedPosts = async (pageToFetch = 1) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const { data, error } = await supabase
-        .from('saved_posts')
-        .select(`
+  const fetchInProgress = useRef(false)
+
+  const fetchSavedPosts = useCallback(
+    async (pageToFetch = 1, replace = false) => {
+      if (fetchInProgress.current) return
+      fetchInProgress.current = true
+
+      setLoading(true)
+      setError(null)
+      try {
+        const { data, error } = await supabase
+          .from('saved_posts')
+          .select(
+            `
           posts (
             id,
             content,
             created_at,
             user_id,
             users (
-              email,
-              username
+              id,
+              username,
+              email
             )
           )
-        `)
-        .eq('user_id', props.user.id)
-        .order('created_at', { ascending: false })
-        .range((pageToFetch - 1) * PAGE_SIZE, pageToFetch * PAGE_SIZE - 1)
+        `
+          )
+          .eq('user_id', props.user.id)
+          .order('created_at', { ascending: false })
+          .range((pageToFetch - 1) * PAGE_SIZE, pageToFetch * PAGE_SIZE - 1)
 
-      if (error) throw error
+        if (error) throw error
 
-      const mappedPosts = (data || [])
-        .map((item: any) => {
-          const post = item.posts
-          if (!post) return null
-          return {
-            ...post,
-            users: post.users,
+        const validated = SavedPostsResponseSchema.safeParse(data)
+        if (!validated.success) throw new Error('Validation failed')
+
+        // Deduplicate newPosts before setting posts to avoid duplicates
+        const newPostsRaw = validated.data
+          .map((item) => item.posts)
+          .filter((post): post is Post => !!post)
+        const newPosts = dedupePosts(newPostsRaw)
+
+        if (replace) {
+          setPosts(newPosts)
+        } else {
+          if (pageToFetch === 1) {
+            setPosts(newPosts)
+          } else {
+            setPosts((prev) => dedupePosts([...prev, ...newPosts]))
           }
-        })
-        .filter((p: Post | null) => p !== null) as Post[]
+        }
 
-      console.log('Fetched saved posts:', mappedPosts) // <-- Debug
-
-      if (pageToFetch === 1) {
-        setPosts(mappedPosts)
-      } else {
-        setPosts((prev) => [...prev, ...mappedPosts])
+        setHasMore(newPosts.length === PAGE_SIZE)
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
+        fetchInProgress.current = false
       }
-
-      setHasMore(mappedPosts.length === PAGE_SIZE)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [props.user.id]
+  )
 
   useImperativeHandle(ref, () => ({
     refetch: () => {
       setPage(1)
-      fetchSavedPosts(1)
+      fetchSavedPosts(1, true)
     },
   }))
 
   useEffect(() => {
     setPage(1)
-    fetchSavedPosts(1)
+    fetchSavedPosts(1, true)
 
     const subscription = supabase
       .channel('public:saved_posts')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'saved_posts' },
-        () => fetchSavedPosts(1)
+        () => fetchSavedPosts(1, true)
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(subscription)
     }
-  }, [props.user?.id])
+  }, [fetchSavedPosts])
 
   const loadMore = () => {
     if (loading) return
     const nextPage = page + 1
     setPage(nextPage)
-    fetchSavedPosts(nextPage)
+    fetchSavedPosts(nextPage, false)
   }
 
   const toggleExpanded = (id: string) => {
@@ -126,8 +150,7 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
     }))
   }
 
-  // Defensive check for empty posts array
-  const noPostsToShow = !loading && (posts.length === 0)
+  const noPostsToShow = !loading && posts.length === 0
 
   return (
     <div className="space-y-4">
@@ -135,7 +158,6 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
         <p className="text-center p-4 text-white">Loading posts...</p>
       )}
       {error && <p className="text-center p-4 text-red-300">Error: {error}</p>}
-
       {noPostsToShow && (
         <p className="text-center text-gray-500 text-sm">
           You have no saved posts.
@@ -143,9 +165,10 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
       )}
 
       {posts.map((post) => {
-        const username =
-          post.users?.username || post.users?.email || 'Unknown user'
-        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
+        const username = post.users?.username || post.users?.email || 'Unknown user'
+        const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+          username
+        )}`
         const isLong = post.content.length > 140
         const isExpanded = expandedPosts[post.id]
 
@@ -186,9 +209,7 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
                 </button>
               )}
               <span className="text-xs text-gray-400">
-                {formatDistanceToNow(new Date(post.created_at), {
-                  addSuffix: true,
-                })}
+                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
               </span>
             </div>
           </div>
@@ -211,6 +232,25 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
 
 SavedPosts.displayName = 'SavedPosts'
 export default SavedPosts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
