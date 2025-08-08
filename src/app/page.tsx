@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { Toaster, toast } from 'react-hot-toast'
 import CustomAuth from '@/components/CustomAuth'
 import { PostProvider } from '@/context/PostProvider'
+import TabSwitcher from '@/components/TabSwitcher'
 
 export default function Page() {
   const { user, loading } = useAuth()
@@ -85,49 +86,32 @@ export default function Page() {
 
           {/* Top Section */}
           <section className="flex gap-6" style={{ height: '320px' }}>
-            <div className="w-[25%] min-w-0 h-full">
+            <aside className="w-[25%] min-w-0 h-full">
               <ProfileCard user={user} />
-            </div>
-            <div className="w-[75%] min-w-0 h-full">
+            </aside>
+            <section className="w-[75%] min-w-0 h-full">
               <Gallery />
-            </div>
+            </section>
           </section>
 
           {/* Bottom Section */}
           <section className="flex gap-6 items-start overflow-hidden">
-            <main className="flex-1 basis-1/4 min-w-0 flex flex-col gap-6">
+            <section className="flex-1 basis-1/4 min-w-0 flex flex-col gap-6">
               <ChirpBox user={user} onChirp={handleChirp} />
 
-              {/* FILTER - Inserted exactly here, styled like GlobalTimeline filters */}
-              <div className="flex justify-center">
-                <div className="inline-flex items-center rounded-full bg-gray-100 p-1 text-sm font-semibold text-gray-500">
-                  {['posts', 'saved', 'explore'].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab as 'posts' | 'saved' | 'explore')}
-                      className={`px-4 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${
-                        activeTab === tab
-                          ? 'bg-white text-black shadow-sm'
-                          : 'hover:text-black'
-                      }`}
-                    >
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <TabSwitcher activeTab={activeTab} setActiveTab={setActiveTab} />
 
-              {/* Render posts or saved or explore */}
               {activeTab === 'posts' && <MyPosts ref={myPostsRef} user={user} />}
               {activeTab === 'saved' && <SavedPosts user={user} />}
               {activeTab === 'explore' && (
                 <p className="text-gray-500 text-sm text-center mt-4">Explore coming soon...</p>
               )}
-            </main>
+            </section>
 
-            <aside className="flex-1 basis-3/4 min-w-0 bg-white rounded-lg p-6 shadow-md">
+            <main className="flex-1 basis-3/4 min-w-0 bg-white rounded-lg p-6 shadow-md">
+              <h2 className="text-xl font-bold text-gray-900 mb-5">What’s happening?</h2>
               <GlobalTimeline ref={globalTimelineRef} user={user} />
-            </aside>
+            </main>
           </section>
         </div>
       </div>

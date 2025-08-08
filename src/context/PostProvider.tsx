@@ -11,6 +11,7 @@ import {
 import { toast } from 'react-hot-toast'
 import { PostUser, PostUserSchema } from '@/schemas/post'
 import { supabase } from '@/lib/supabaseClient'
+import { User } from '@supabase/supabase-js'
 
 interface PostContextProps {
   posts: PostUser[]
@@ -22,6 +23,8 @@ interface PostContextProps {
   toggleLike: (postId: string) => void
   toggleSave: (postId: string) => void
   deletePost: (postId: string) => void
+  refetchPosts: () => void
+  user: User | null // ✅ added user to context
 }
 
 const PostContext = createContext<PostContextProps | undefined>(undefined)
@@ -33,6 +36,7 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   const [hasMore, setHasMore] = useState(true)
   const [likedPostIds, setLikedPostIds] = useState<string[]>([])
   const [savedPostIds, setSavedPostIds] = useState<string[]>([])
+  const [user, setUser] = useState<User | null>(null) // ✅ added user state
   const PAGE_SIZE = 10
   const hasFetchedRef = useRef(false)
 
@@ -55,6 +59,29 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error('Error fetching posts:', error)
+      setLoading(false)
+      return
+    }
+
+    const validated = PostUserSchema.array().safeParse(data)
+    if (validated.success) {
+      setPosts(deduplicatePosts(validated.data))
+      setHasMore(validated.data.length === PAGE_SIZE)
+      setPage(0)
+    }
+    setLoading(false)
+  }, [])
+
+  const refetchPosts = useCallback(async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*, users(*)')
+      .order('created_at', { ascending: false })
+      .range(0, PAGE_SIZE - 1)
+
+    if (error) {
+      console.error('Error refetching posts:', error)
       setLoading(false)
       return
     }
@@ -199,6 +226,16 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    const getUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setUser(user)
+    }
+    getUser()
+  }, [])
+
+  useEffect(() => {
     if (!hasFetchedRef.current) {
       fetchPosts()
       hasFetchedRef.current = true
@@ -219,6 +256,8 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
         toggleLike,
         toggleSave,
         deletePost,
+        refetchPosts,
+        user, // ✅ include in context value
       }}
     >
       {children}

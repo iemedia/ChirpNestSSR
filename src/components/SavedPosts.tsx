@@ -3,144 +3,60 @@
 import {
   useEffect,
   useState,
-  useRef,
   forwardRef,
   useImperativeHandle,
   Ref,
-  useCallback,
 } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
-import { z } from 'zod'
-import { PostSchema } from '@/schemas/post'
-
-const PAGE_SIZE = 3
-
-const SavedPostSchema = z.object({
-  posts: PostSchema.nullable(),
-})
-const SavedPostsResponseSchema = z.array(SavedPostSchema)
+import { usePostContext } from '@/context/PostProvider'
+import toast from 'react-hot-toast'
+import { FiTrash2 } from 'react-icons/fi'
 
 export type SavedPostsHandle = {
   refetch: () => void
 }
 
-type Post = z.infer<typeof PostSchema>
-
-const dedupePosts = (posts: Post[]) => {
-  const map = new Map<string, Post>()
-  const result: Post[] = []
-  posts.forEach((post) => {
-    if (!map.has(post.id)) {
-      map.set(post.id, post)
-      result.push(post)
-    }
-  })
-  return result
-}
+const PAGE_SIZE = 3
 
 const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>) => {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const {
+    posts,
+    loading,
+    hasMore,
+    fetchNextPage,
+    refetchPosts,
+    toggleSave,        // <-- Use toggleSave here
+    savedPostIds,
+  } = usePostContext()
+
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
+  const [fadingOut, setFadingOut] = useState<string | null>(null)
 
-  const fetchInProgress = useRef(false)
+  // Local pagination count
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
 
-  const fetchSavedPosts = useCallback(
-    async (pageToFetch = 1, replace = false) => {
-      if (fetchInProgress.current) return
-      fetchInProgress.current = true
-
-      setLoading(true)
-      setError(null)
-      try {
-        const { data, error } = await supabase
-          .from('saved_posts')
-          .select(
-            `
-          posts (
-            id,
-            content,
-            created_at,
-            user_id,
-            users (
-              id,
-              username,
-              email
-            )
-          )
-        `
-          )
-          .eq('user_id', props.user.id)
-          .order('created_at', { ascending: false })
-          .range((pageToFetch - 1) * PAGE_SIZE, pageToFetch * PAGE_SIZE - 1)
-
-        if (error) throw error
-
-        const validated = SavedPostsResponseSchema.safeParse(data)
-        if (!validated.success) throw new Error('Validation failed')
-
-        // Deduplicate newPosts before setting posts to avoid duplicates
-        const newPostsRaw = validated.data
-          .map((item) => item.posts)
-          .filter((post): post is Post => !!post)
-        const newPosts = dedupePosts(newPostsRaw)
-
-        if (replace) {
-          setPosts(newPosts)
-        } else {
-          if (pageToFetch === 1) {
-            setPosts(newPosts)
-          } else {
-            setPosts((prev) => dedupePosts([...prev, ...newPosts]))
-          }
-        }
-
-        setHasMore(newPosts.length === PAGE_SIZE)
-      } catch (err: any) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-        fetchInProgress.current = false
-      }
-    },
-    [props.user.id]
-  )
+  // Filter only saved posts
+  const savedPosts = posts.filter((post) => savedPostIds.includes(post.id))
 
   useImperativeHandle(ref, () => ({
     refetch: () => {
-      setPage(1)
-      fetchSavedPosts(1, true)
+      refetchPosts()
+      setDisplayCount(PAGE_SIZE)
     },
   }))
 
   useEffect(() => {
-    setPage(1)
-    fetchSavedPosts(1, true)
-
-    const subscription = supabase
-      .channel('public:saved_posts')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'saved_posts' },
-        () => fetchSavedPosts(1, true)
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(subscription)
-    }
-  }, [fetchSavedPosts])
+    refetchPosts()
+    setDisplayCount(PAGE_SIZE)
+  }, [refetchPosts])
 
   const loadMore = () => {
-    if (loading) return
-    const nextPage = page + 1
-    setPage(nextPage)
-    fetchSavedPosts(nextPage, false)
+    if (displayCount < savedPosts.length) {
+      setDisplayCount((prev) => prev + PAGE_SIZE)
+    } else if (hasMore && !loading) {
+      fetchNextPage()
+    }
   }
 
   const toggleExpanded = (id: string) => {
@@ -150,41 +66,99 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
     }))
   }
 
-  const noPostsToShow = !loading && posts.length === 0
+  const confirmUnsave = (postId: string) => {
+    toast((t) => (
+      <div className="text-white">
+        <p className="mb-2">Unsave this post?</p>
+        <div className="flex justify-end gap-3">
+          <button
+            className="px-2 py-1 text-sm text-gray-300 hover:text-red-400 transition cursor-pointer"
+            onClick={async () => {
+              toast.dismiss(t.id)
+              setFadingOut(postId)
+              setTimeout(async () => {
+                await toggleSave(postId)    // <-- unsave post here
+                toast.success('Post Removed')
+                refetchPosts()
+                setFadingOut(null)
+
+                setDisplayCount((current) => {
+                  const newCount = current - 1
+                  return newCount >= PAGE_SIZE ? newCount : PAGE_SIZE
+                })
+              }, 300)
+            }}
+          >
+            Yes
+          </button>
+          <button
+            className="px-2 py-1 text-sm text-gray-400 hover:text-gray-200 transition cursor-pointer"
+            onClick={() => toast.dismiss(t.id)}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 4000,
+      position: 'bottom-center',
+      style: {
+        background: '#1f1f1f',
+        border: '1px solid #444',
+        color: '#fff',
+      },
+    })
+  }
 
   return (
     <div className="space-y-4">
-      {loading && posts.length === 0 && (
-        <p className="text-center p-4 text-white">Loading posts...</p>
+      {loading && savedPosts.length === 0 && (
+        <p className="text-center text-gray-500 text-sm">Loading saved posts...</p>
       )}
-      {error && <p className="text-center p-4 text-red-300">Error: {error}</p>}
-      {noPostsToShow && (
+
+      {savedPosts.length === 0 && !loading && (
         <p className="text-center text-gray-500 text-sm">
-          You have no saved posts.
+          You haven&apos;t saved any posts yet.
         </p>
       )}
 
-      {posts.map((post) => {
-        const username = post.users?.username || post.users?.email || 'Unknown user'
+      {savedPosts.slice(0, displayCount).map((post) => {
+        const username =
+          post.users?.username || post.users?.email || 'Unknown user'
         const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
           username
         )}`
         const isLong = post.content.length > 140
         const isExpanded = expandedPosts[post.id]
+        const isFadingOut = fadingOut === post.id
 
         return (
           <div
             key={post.id}
-            className="p-6 rounded-xl bg-gray-900 text-gray-100 shadow-md shadow-black/20 animate-fade-in"
+            className={clsx(
+              'p-6 rounded-xl bg-gray-900 text-gray-100 shadow-md shadow-black/20 transition-opacity duration-300 ease-in-out animate-fade-in',
+              isFadingOut && 'opacity-0 pointer-events-none'
+            )}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <img
-                src={avatarUrl}
-                alt={`${username} avatar`}
-                className="w-6 h-6 rounded-full"
-                loading="lazy"
-              />
-              <span className="text-white font-semibold">{username}</span>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <img
+                  src={avatarUrl}
+                  alt={`${username} avatar`}
+                  className="w-6 h-6 rounded-full"
+                  loading="lazy"
+                />
+                <span className="text-white font-semibold">{username}</span>
+              </div>
+              {post.user_id === props.user.id && (
+                <button
+                  onClick={() => confirmUnsave(post.id)} // <-- changed here
+                  className="text-gray-500 hover:text-red-500 transition cursor-pointer"
+                  title="Remove from saved"
+                >
+                  <FiTrash2 size={16} />
+                </button>
+              )}
             </div>
 
             <div
@@ -209,14 +183,16 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
                 </button>
               )}
               <span className="text-xs text-gray-400">
-                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(post.created_at), {
+                  addSuffix: true,
+                })}
               </span>
             </div>
           </div>
         )
       })}
 
-      {hasMore && !loading && (
+      {(displayCount < savedPosts.length || (hasMore && !loading)) && !loading && (
         <div className="text-center">
           <button
             onClick={loadMore}
@@ -230,8 +206,8 @@ const SavedPosts = forwardRef((props: { user: any }, ref: Ref<SavedPostsHandle>)
   )
 })
 
-SavedPosts.displayName = 'SavedPosts'
 export default SavedPosts
+
 
 
 

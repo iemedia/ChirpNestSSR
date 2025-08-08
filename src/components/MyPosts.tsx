@@ -6,108 +6,58 @@ import {
   forwardRef,
   useImperativeHandle,
   Ref,
-  useCallback,
 } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 import { formatDistanceToNow } from 'date-fns'
 import clsx from 'clsx'
-import { PostSchema } from '@/schemas/post'
-import { z } from 'zod'
+import { usePostContext } from '@/context/PostProvider'
 import toast from 'react-hot-toast'
 import { FiTrash2 } from 'react-icons/fi'
-
-const PAGE_SIZE = 3
-
-type Post = z.infer<typeof PostSchema>
 
 export type MyPostsHandle = {
   refetch: () => void
 }
 
+const PAGE_SIZE = 3
+
 const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
+  const {
+    posts,
+    loading,
+    hasMore,
+    fetchNextPage,
+    refetchPosts,
+    deletePost,
+  } = usePostContext()
+
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [fadingOut, setFadingOut] = useState<string | null>(null)
 
-  const fetchPosts = useCallback(async (pageToFetch = 1) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const rangeFrom = (pageToFetch - 1) * PAGE_SIZE
-      const rangeTo = pageToFetch * PAGE_SIZE - 1
+  // Local pagination count (simulate load 3 posts at a time)
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE)
 
-      const { data, error } = await supabase
-        .from('posts')
-        .select(
-          `
-          id,
-          content,
-          created_at,
-          user_id,
-          users (
-            id,
-            username,
-            email
-          )
-        `
-        )
-        .eq('user_id', props.user.id)
-        .order('created_at', { ascending: false })
-        .range(rangeFrom, rangeTo)
-
-      if (error) throw error
-
-      const parsed = z.array(PostSchema).safeParse(data)
-      if (!parsed.success) throw new Error('Invalid post data from Supabase')
-
-      if (pageToFetch === 1) {
-        setPosts(parsed.data)
-      } else {
-        setPosts((prev) => [...prev, ...parsed.data])
-      }
-
-      setHasMore(parsed.data.length === PAGE_SIZE)
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [props.user.id])
+  // Filter posts by user
+  const myPosts = posts.filter((post) => post.user_id === props.user.id)
 
   useImperativeHandle(ref, () => ({
     refetch: () => {
-      setPage(1)
-      fetchPosts(1)
+      refetchPosts()
+      setDisplayCount(PAGE_SIZE) // reset display count on refetch
     },
   }))
 
   useEffect(() => {
-    setPage(1)
-    fetchPosts(1)
-
-    const subscription = supabase
-      .channel('public:posts')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'posts' },
-        () => fetchPosts(1)
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(subscription)
-    }
-  }, [fetchPosts])
+    refetchPosts()
+    setDisplayCount(PAGE_SIZE)
+  }, [refetchPosts])
 
   const loadMore = () => {
-    if (loading) return
-    const nextPage = page + 1
-    setPage(nextPage)
-    fetchPosts(nextPage)
+    // First load more locally if available
+    if (displayCount < myPosts.length) {
+      setDisplayCount((prev) => prev + PAGE_SIZE)
+    } else if (hasMore && !loading) {
+      // Otherwise fetch next global page if available
+      fetchNextPage()
+    }
   }
 
   const toggleExpanded = (id: string) => {
@@ -128,15 +78,17 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
               toast.dismiss(t.id)
               setFadingOut(postId)
               setTimeout(async () => {
-                const { error } = await supabase.from('posts').delete().eq('id', postId)
-                if (error) {
-                  toast.error('Failed to delete post.')
-                } else {
-                  toast.success('Post deleted')
-                  fetchPosts(1)
-                }
+                await deletePost(postId)
+                toast.success('Post deleted')
+                refetchPosts()
                 setFadingOut(null)
-              }, 300) // match fade-out duration
+
+                // Adjust displayCount downwards on delete
+                setDisplayCount((current) => {
+                  const newCount = current - 1
+                  return newCount >= PAGE_SIZE ? newCount : PAGE_SIZE
+                })
+              }, 300)
             }}
           >
             Yes
@@ -162,16 +114,17 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
 
   return (
     <div className="space-y-4">
-      {loading && posts.length === 0 && (
-        <p className="text-center p-4 text-white">Loading posts...</p>
-      )}
-      {error && <p className="text-center p-4 text-red-300">Error: {error}</p>}
-
-      {posts.length === 0 && !loading && (
-        <p className="text-center text-white">No posts yet.</p>
+      {loading && myPosts.length === 0 && (
+        <p className="text-center text-gray-500 text-sm">Loading posts...</p>
       )}
 
-      {posts.map((post) => {
+      {myPosts.length === 0 && !loading && (
+        <p className="text-center text-gray-500 text-sm">
+          You don&apos;t have any posts yet.
+        </p>
+      )}
+
+      {myPosts.slice(0, displayCount).map((post) => {
         const username =
           post.users?.username || post.users?.email || 'Unknown user'
         const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
@@ -201,7 +154,7 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
               </div>
               <button
                 onClick={() => confirmDelete(post.id)}
-                className="text-gray-500 hover:text-red-500 transition"
+                className="text-gray-500 hover:text-red-500 transition cursor-pointer"
                 title="Delete post"
               >
                 <FiTrash2 size={16} />
@@ -239,7 +192,7 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
         )
       })}
 
-      {hasMore && !loading && (
+      {(displayCount < myPosts.length || (hasMore && !loading)) && !loading && (
         <div className="text-center">
           <button
             onClick={loadMore}
@@ -254,6 +207,14 @@ const MyPosts = forwardRef((props: { user: any }, ref: Ref<MyPostsHandle>) => {
 })
 
 export default MyPosts
+
+
+
+
+
+
+
+
 
 
 

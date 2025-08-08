@@ -10,16 +10,25 @@ type ChirpBoxProps = {
   onChirp?: () => void
 }
 
+const MAX_LINES = 5
+const MAX_CHARS = 280
+const LINE_HEIGHT = 24
+const VERTICAL_PADDING = 24 // 12px top + 12px bottom
+const MAX_HEIGHT = MAX_LINES * LINE_HEIGHT + VERTICAL_PADDING
+
+const resizeTextarea = (el: HTMLTextAreaElement) => {
+  el.style.height = 'auto'
+  const newHeight = Math.min(el.scrollHeight, MAX_HEIGHT)
+  el.style.height = `${newHeight}px`
+  if (el.scrollHeight > MAX_HEIGHT) {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
 export default function ChirpBox({ user, onChirp }: ChirpBoxProps) {
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-  const MAX_LINES = 5
-  const MAX_CHARS = 280
-  const LINE_HEIGHT = 24
-  const VERTICAL_PADDING = 24 // 12px top + 12px bottom
-  const MAX_HEIGHT = MAX_LINES * LINE_HEIGHT + VERTICAL_PADDING
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const raw = e.target.value
@@ -39,36 +48,32 @@ export default function ChirpBox({ user, onChirp }: ChirpBoxProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     const cleaned = cleanContent(content)
-    if (!cleaned.trim()) return
 
-    setLoading(true)
-    const { error } = await supabase.from('posts').insert([
-      { content: cleaned, user_id: user.id },
-    ])
-    setLoading(false)
+    if (!cleaned.replace(/\n/g, '').trim()) return
 
-    if (!error) {
-      setContent('')
+    try {
+      setLoading(true)
+      const { error } = await supabase.from('posts').insert([
+        { content: cleaned, user_id: user.id },
+      ])
+      if (error) throw error
+
       toast.success('Chirp posted!')
+      setContent('')
       onChirp?.()
       textareaRef.current?.focus()
-    } else {
-      toast.error('Failed to chirp: ' + error.message)
+    } catch (err: any) {
+      toast.error('Failed to chirp: ' + err.message)
+    } finally {
+      setLoading(false)
     }
   }
 
   useEffect(() => {
     const el = textareaRef.current
-    if (el) {
-      el.style.height = 'auto'
-      const newHeight = Math.min(el.scrollHeight, MAX_HEIGHT)
-      el.style.height = `${newHeight}px`
-
-      if (el.scrollHeight > MAX_HEIGHT) {
-        el.scrollTop = el.scrollHeight
-      }
-    }
+    if (el) resizeTextarea(el)
   }, [content])
 
   return (

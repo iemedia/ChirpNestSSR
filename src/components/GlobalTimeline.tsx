@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { usePostContext } from '@/context/PostProvider'
 import PostCard from './PostCard'
 import LoadingSpinner from './LoadingSpinner'
@@ -16,7 +16,10 @@ export default function GlobalTimeline() {
     toggleLike,
     toggleSave,
     deletePost,
+    user,
   } = usePostContext()
+
+  const [localPosts, setLocalPosts] = useState(posts) // ✅ Local state for instant updates
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const lastPostRef = useRef<HTMLDivElement | null>(null)
@@ -43,12 +46,30 @@ export default function GlobalTimeline() {
     return () => {
       if (observerRef.current) observerRef.current.disconnect()
     }
-  }, [posts, handleObserver])
+  }, [localPosts, handleObserver])
+
+  // ✅ Sync localPosts whenever posts from context change
+  useEffect(() => {
+    setLocalPosts(posts)
+  }, [posts])
+
+  // ✅ Wait until user is loaded before rendering
+  if (!user) return null
+
+  const handleDelete = async (postId: string) => {
+    await deletePost(postId)
+    setLocalPosts((prev) => prev.filter((p) => p.id !== postId))
+  }
 
   return (
     <div className="space-y-4 pb-20">
-      {posts.map((post, idx) => {
-        const isLast = idx === posts.length - 1
+      {!loading && localPosts.length === 0 && (
+        <p className="text-gray-500 text-sm">There are no posts to display.</p>
+      )}
+
+      {localPosts.map((post, idx) => {
+        const isLast = idx === localPosts.length - 1
+        const isUserPost = post.user_id === user.id
 
         return (
           <div
@@ -60,23 +81,18 @@ export default function GlobalTimeline() {
               post={post}
               liked={likedPostIds.includes(post.id)}
               saved={savedPostIds.includes(post.id)}
-              onLike={() => toggleLike(post.id)}
-              onSave={() => toggleSave(post.id)}
-              onDelete={() => deletePost(post.id)}
+              onLikeToggle={(postId) => toggleLike(postId)}
+              onSaveToggle={(postId) => toggleSave(postId)}
+              {...(isUserPost && {
+                onDelete: (postId) => handleDelete(postId),
+              })}
             />
           </div>
         )
       })}
+
       {loading && <LoadingSpinner />}
     </div>
   )
 }
-
-
-
-
-
-
-
-
 
