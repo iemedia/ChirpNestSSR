@@ -24,7 +24,7 @@ interface PostContextProps {
   toggleSave: (postId: string) => void
   deletePost: (postId: string) => void
   refetchPosts: () => void
-  user: User | null // ✅ added user to context
+  user: User | null
 }
 
 const PostContext = createContext<PostContextProps | undefined>(undefined)
@@ -36,7 +36,7 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   const [hasMore, setHasMore] = useState(true)
   const [likedPostIds, setLikedPostIds] = useState<string[]>([])
   const [savedPostIds, setSavedPostIds] = useState<string[]>([])
-  const [user, setUser] = useState<User | null>(null) // ✅ added user state
+  const [user, setUser] = useState<User | null>(null)
   const PAGE_SIZE = 10
   const hasFetchedRef = useRef(false)
 
@@ -127,10 +127,7 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   }, [page, hasMore, loading])
 
   const handleRealtimeInserts = (newPost: PostUser) => {
-    setPosts((prev) => {
-      const updated = deduplicatePosts([newPost, ...prev])
-      return updated
-    })
+    setPosts((prev) => deduplicatePosts([newPost, ...prev]))
     toast('✨ New post received')
   }
 
@@ -199,10 +196,10 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   const toggleLike = async (postId: string) => {
     const alreadyLiked = likedPostIds.includes(postId)
     if (alreadyLiked) {
-      await supabase.from('likes').delete().match({ post_id: postId })
+      await supabase.from('likes').delete().match({ post_id: postId, user_id: user?.id })
       setLikedPostIds((prev) => prev.filter((id) => id !== postId))
     } else {
-      await supabase.from('likes').insert({ post_id: postId })
+      await supabase.from('likes').insert({ post_id: postId, user_id: user?.id })
       setLikedPostIds((prev) => [...prev, postId])
     }
   }
@@ -210,10 +207,10 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   const toggleSave = async (postId: string) => {
     const alreadySaved = savedPostIds.includes(postId)
     if (alreadySaved) {
-      await supabase.from('saved_posts').delete().match({ post_id: postId })
+      await supabase.from('saved_posts').delete().match({ post_id: postId, user_id: user?.id })
       setSavedPostIds((prev) => prev.filter((id) => id !== postId))
     } else {
-      await supabase.from('saved_posts').insert({ post_id: postId })
+      await supabase.from('saved_posts').insert({ post_id: postId, user_id: user?.id })
       setSavedPostIds((prev) => [...prev, postId])
     }
   }
@@ -226,13 +223,32 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
+    const getUserData = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      const currentUser = authData.user
+      setUser(currentUser)
+
+      if (currentUser) {
+        // Fetch liked posts
+        const { data: liked } = await supabase
+          .from('likes')
+          .select('post_id')
+          .eq('user_id', currentUser.id)
+        if (liked) {
+          setLikedPostIds(liked.map((l) => l.post_id))
+        }
+
+        // Fetch saved posts
+        const { data: saved } = await supabase
+          .from('saved_posts')
+          .select('post_id')
+          .eq('user_id', currentUser.id)
+        if (saved) {
+          setSavedPostIds(saved.map((s) => s.post_id))
+        }
+      }
     }
-    getUser()
+    getUserData()
   }, [])
 
   useEffect(() => {
@@ -257,7 +273,7 @@ export function PostProvider({ children }: { children: React.ReactNode }) {
         toggleSave,
         deletePost,
         refetchPosts,
-        user, // ✅ include in context value
+        user,
       }}
     >
       {children}

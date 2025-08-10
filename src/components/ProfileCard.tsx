@@ -56,17 +56,16 @@ export default function ProfileCard() {
       <img
         src={avatar}
         alt="User Avatar"
-        className="w-24 h-24 rounded-full border-2 border-purple-500 shadow mb-4"
+        className="w-24 h-24 rounded-full border-2 border-purple-600 shadow mb-4 bg-white"
         loading="lazy"
       />
 
       <h2 className="text-xl font-bold mb-1">
         {profile.username || 'Unnamed User'}
       </h2>
-<p className="text-sm text-gray-400 mb-4 text-center px-2">
-  {profile.bio?.trim() ? profile.bio : 'Sharing vibes, tweets, and sometimes memes 🐥'}
-</p>
-
+      <p className="text-sm text-gray-400 mb-4 text-center px-2">
+        {profile.bio?.trim() ? profile.bio : 'Sharing vibes, tweets, and sometimes memes 🐥'}
+      </p>
 
       <div className="text-xs text-gray-500 space-y-1 text-center">
         <p>📍 Somewhere on the Web</p>

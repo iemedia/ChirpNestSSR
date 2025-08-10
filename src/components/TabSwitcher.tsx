@@ -11,18 +11,27 @@ export default function TabSwitcher({
 }) {
   const tabs: Tab[] = ['posts', 'saved', 'explore']
 
+  // Map tab keys to display labels
+  const tabLabels: Record<Tab, string> = {
+    posts: 'Posts',
+    saved: 'Saved',
+    explore: 'Activity',
+  }
+
   return (
-    <div className="flex justify-center">
-      <div className="inline-flex items-center rounded-full bg-gray-100 p-1 text-sm font-semibold text-gray-500">
+    <div className="flex justify-center w-full max-w-md">
+      <div className="inline-flex items-center rounded-xl bg-gray-100 p-1 text-sm font-semibold text-gray-500 w-full">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 rounded-full transition-all duration-150 cursor-pointer ${
-              activeTab === tab ? 'bg-white text-black shadow-sm' : 'hover:text-black'
+            className={`px-4 py-1.5 rounded-xl transition-all duration-150 cursor-pointer w-full text-center ${
+              activeTab === tab
+                ? 'bg-white text-black shadow-sm'
+                : 'hover:text-black'
             }`}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tabLabels[tab]}
           </button>
         ))}
       </div>

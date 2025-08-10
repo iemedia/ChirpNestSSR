@@ -1,7 +1,12 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
+import { FaThumbsUp, FaThumbsDown, FaRegCommentDots, FaShare, FaAward, FaHeart } from 'react-icons/fa'
+import { FiTrash2 } from 'react-icons/fi'
+import { formatDistanceToNow } from 'date-fns'
+import toast, { Toaster } from 'react-hot-toast'
+import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/hooks/useAuth'
 import { useEnsureUserProfile } from '@/hooks/useEnsureUserProfile'
 import ChirpBox from '@/components/ChirpBox'
@@ -10,17 +15,17 @@ import GlobalTimeline, { GlobalTimelineHandle } from '@/components/GlobalTimelin
 import SavedPosts from '@/components/SavedPosts'
 import Gallery from '@/components/Gallery'
 import ProfileCard from '@/components/ProfileCard'
-import { supabase } from '@/lib/supabaseClient'
-import { Toaster, toast } from 'react-hot-toast'
 import CustomAuth from '@/components/CustomAuth'
 import { PostProvider } from '@/context/PostProvider'
+import MainTabSwitcher from '@/components/MainTabSwitcher'
 import TabSwitcher from '@/components/TabSwitcher'
 
 export default function Page() {
   const { user, loading } = useAuth()
   useEnsureUserProfile(user)
 
-  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'explore'>('posts')
+  const [mainActiveTab, setMainActiveTab] = useState<'myFeed' | 'explore'>('myFeed')
+  const [subActiveTab, setSubActiveTab] = useState<'posts' | 'saved' | 'activity'>('posts')
 
   const myPostsRef = useRef<MyPostsHandle>(null)
   const globalTimelineRef = useRef<GlobalTimelineHandle>(null)
@@ -95,16 +100,30 @@ export default function Page() {
           </section>
 
           {/* Bottom Section */}
-          <section className="flex gap-6 items-start overflow-hidden">
-            <section className="flex-1 basis-1/4 min-w-0 flex flex-col gap-6">
+          <section className="flex gap-6 items-start">
+            <section className="flex-1 basis-1/4 min-w-0 flex flex-col gap-4">
               <ChirpBox user={user} onChirp={handleChirp} />
 
-              <TabSwitcher activeTab={activeTab} setActiveTab={setActiveTab} />
+              {/* Wrap both switchers with zero gap so they look connected */}
+              <div className="flex flex-col gap-0">
+                <MainTabSwitcher activeTab={mainActiveTab} setActiveTab={setMainActiveTab} />
+                {mainActiveTab === 'myFeed' && (
+                  <TabSwitcher activeTab={subActiveTab} setActiveTab={setSubActiveTab} />
+                )}
+              </div>
 
-              {activeTab === 'posts' && <MyPosts ref={myPostsRef} user={user} />}
-              {activeTab === 'saved' && <SavedPosts user={user} />}
-              {activeTab === 'explore' && (
-                <p className="text-gray-500 text-sm text-center mt-4">Explore coming soon...</p>
+              {mainActiveTab === 'myFeed' && subActiveTab === 'posts' && (
+                <MyPosts ref={myPostsRef} user={user} />
+              )}
+              {mainActiveTab === 'myFeed' && subActiveTab === 'saved' && (
+                <SavedPosts user={user} />
+              )}
+              {mainActiveTab === 'myFeed' && subActiveTab === 'activity' && (
+                <p className="text-gray-500 text-sm text-center mt-4">Activity coming soon...</p>
+              )}
+
+              {mainActiveTab === 'explore' && (
+                <p className="text-gray-500 text-sm text-center mt-4">Explore communities coming soon...</p>
               )}
             </section>
 
@@ -118,4 +137,3 @@ export default function Page() {
     </PostProvider>
   )
 }
-

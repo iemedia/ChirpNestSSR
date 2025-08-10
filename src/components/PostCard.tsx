@@ -1,8 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { AiFillHeart } from 'react-icons/ai'
-import { FaRegCommentDots, FaShare, FaBookmark } from 'react-icons/fa'
+import { FaThumbsUp, FaThumbsDown, FaRegCommentDots, FaShare, FaAward, FaHeart } from 'react-icons/fa'
 import { FiTrash2 } from 'react-icons/fi'
 import { formatDistanceToNow } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -22,19 +21,27 @@ type Post = {
 
 type PostCardProps = {
   post: Post
-  liked: boolean
+  upvoted: boolean
+  downvoted: boolean
   saved: boolean
-  onLikeToggle: (postId: string) => void
+  liked: boolean                 // NEW liked prop
+  onUpvoteToggle: (postId: string) => void
+  onDownvoteToggle: (postId: string) => void
   onSaveToggle: (postId: string) => void
-  onDelete?: (postId: string) => void // ✅ optional delete prop
+  onLikeToggle: (postId: string) => void // NEW like toggle callback
+  onDelete?: (postId: string) => void
 }
 
 export default function PostCard({
   post,
-  liked,
+  upvoted,
+  downvoted,
   saved,
-  onLikeToggle,
+  liked,             // destructure liked
+  onUpvoteToggle,
+  onDownvoteToggle,
   onSaveToggle,
+  onLikeToggle,      // destructure onLikeToggle
   onDelete,
 }: PostCardProps) {
   const username = useMemo(() => {
@@ -42,9 +49,7 @@ export default function PostCard({
   }, [post.users])
 
   const avatarUrl = useMemo(() => {
-    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-      username
-    )}`
+    return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`
   }, [username])
 
   const timestamp = useMemo(() => {
@@ -116,76 +121,107 @@ export default function PostCard({
       <p className="whitespace-pre-wrap break-words">{post.content}</p>
 
       <div className="flex justify-between items-center mt-5 text-sm">
-        <div className="flex gap-4">
+        <div className="flex gap-1 items-center">
+          {/* Upvote button with green border, flipped horizontally */}
+          <button
+            onClick={() => onUpvoteToggle(post.id)}
+            title="Upvote"
+            className={`cursor-pointer flex items-center justify-center w-7 h-7 rounded-md border-2 transition-all duration-200 ease-in-out 
+              ${
+                upvoted
+                  ? 'border-green-500 bg-green-50 text-green-600 scale-110'
+                  : 'border-green-400 text-green-500 hover:bg-green-100 hover:scale-110'
+              }`}
+          >
+            <FaThumbsUp size={14} style={{ transform: 'scaleX(-1)' }} />
+          </button>
+
+          {/* Downvote button with purple border */}
+          <button
+            onClick={() => onDownvoteToggle(post.id)}
+            title="Downvote"
+            className={`mr-3 cursor-pointer flex items-center justify-center w-7 h-7 rounded-md border-2 transition-all duration-200 ease-in-out 
+              
+              ${
+                downvoted
+                  ? 'border-purple-600 bg-purple-100 text-purple-700 scale-110'
+                  : 'border-purple-500 text-purple-600 hover:bg-purple-200 hover:scale-110'
+              }`}
+          >
+            <FaThumbsDown size={14} />
+          </button>
+
+          {/* Like button - same styling as Save */}
           <button
             onClick={() => onLikeToggle(post.id)}
-            className="flex items-center font-semibold cursor-pointer select-none transition group min-w-[58px]"
+            className="mr-3 flex items-center font-semibold cursor-pointer select-none transition group"
           >
-            <AiFillHeart
-              size={17}
-              className={`transition-all duration-200 ease-in-out mr-1 ${
+            <FaHeart
+              className={`mr-1 transition-all duration-200 ease-in-out ${
                 liked
-                  ? 'text-red-500 scale-110'
-                  : 'text-gray-500 group-hover:text-red-500 group-hover:scale-110'
+                  ? 'text-pink-500 scale-110'
+                  : 'text-pink-500 group-hover:text-pink-500 group-hover:scale-110'
               }`}
+              size={15}
             />
             <span
               className={`transition-all duration-200 ease-in-out ${
-                liked
-                  ? 'text-red-500'
-                  : 'text-gray-500 group-hover:text-red-500'
+                liked ? 'text-pink-500' : 'text-gray-500 group-hover:text-pink-500'
               }`}
             >
               {liked ? 'Liked' : 'Like'}
             </span>
           </button>
 
-          <button
-            onClick={() => alert('Comment feature coming soon!')}
-            className="flex items-center font-semibold cursor-pointer select-none transition group min-w-[102px]"
-          >
-            <FaRegCommentDots
-              className="mr-1 transition-all duration-200 ease-in-out text-purple-600 group-hover:text-green-500 group-hover:scale-110"
-              size={17}
-            />
-            <span className="transition-all duration-200 ease-in-out text-purple-600 group-hover:text-green-500">
-              Comments
-            </span>
-          </button>
-
-          <button
-            onClick={() => alert('Share feature coming soon!')}
-            className="flex items-center font-semibold cursor-pointer select-none transition group min-w-[68px]"
-          >
-            <FaShare
-              className="mr-1 transition-all duration-200 ease-in-out text-purple-600 group-hover:text-green-500 group-hover:scale-110"
-              size={17}
-            />
-            <span className="transition-all duration-200 ease-in-out text-purple-600 group-hover:text-green-500">
-              Share
-            </span>
-          </button>
-
+          {/* Save */}
           <button
             onClick={() => onSaveToggle(post.id)}
-            className="flex items-center font-semibold cursor-pointer select-none transition group min-w-[58px]"
+            className="mr-3 flex items-center font-semibold cursor-pointer select-none transition group"
           >
-            <FaBookmark
+            <FaAward
               className={`mr-1 transition-all duration-200 ease-in-out ${
                 saved
-                  ? 'text-pink-500 scale-110'
-                  : 'text-gray-500 group-hover:text-pink-500 group-hover:scale-110'
+                  ? 'text-orange-500 scale-110'
+                  : 'text-orange-500 group-hover:text-orange-500 group-hover:scale-110'
               }`}
               size={15}
             />
             <span
               className={`transition-all duration-200 ease-in-out ${
                 saved
-                  ? 'text-pink-500'
-                  : 'text-pink-500 group-hover:text-pink-500'
+                  ? 'text-orange-500'
+                  : 'text-gray-500 group-hover:text-orange-500'
               }`}
             >
               {saved ? 'Saved' : 'Save'}
+            </span>
+          </button>
+
+          {/* Share */}
+          <button
+            onClick={() => alert('Share feature coming soon!')}
+            className="mr-3 flex items-center font-semibold cursor-pointer select-none transition group"
+          >
+            <FaShare
+              className="mr-1 transition-all duration-200 ease-in-out text-purple-600 group-hover:text-purple-600 group-hover:scale-110"
+              size={15}
+            />
+            <span className="transition-all duration-200 ease-in-out text-gray-500 group-hover:text-purple-600">
+              Share
+            </span>
+          </button>
+
+          {/* Comments */}
+          <button
+            onClick={() => alert('Comment feature coming soon!')}
+            className="flex items-center font-semibold cursor-pointer select-none transition group"
+          >
+            <FaRegCommentDots
+              className="mr-1 transition-all duration-200 ease-in-out text-purple-600 group-hover:text-purple-600 group-hover:scale-110"
+              size={15}
+            />
+            <span className="transition-all duration-200 ease-in-out text-gray-500 group-hover:text-purple-600">
+              Comments
             </span>
           </button>
         </div>

@@ -79,7 +79,7 @@ export default function ChirpBox({ user, onChirp }: ChirpBoxProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="bg-white p-4 rounded-lg shadow mb-4 space-y-2"
+      className="bg-white p-4 rounded-lg shadow-md shadow-black/10 mb-4 space-y-2"
     >
       <textarea
         ref={textareaRef}
